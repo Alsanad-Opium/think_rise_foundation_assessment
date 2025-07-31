@@ -1,0 +1,14 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Case Results</title>
+</head>
+<body>
+    <h2>Case Details</h2>
+    <p><strong>Party Names:</strong> {{ data.party_names }}</p>
+    <p><strong>Filing Date:</strong> {{ data.filing_date }}</p>
+    <p><strong>Next Hearing Date:</strong> {{ data.next_hearing_date }}</p>
+    <p><a href="{{ data.latest_order_pdf }}" target="_blank">Download Latest Order PDF</a></p>
+    <a href="/">Search another case</a>
+</body>
+</html>

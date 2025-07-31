@@ -1,0 +1,15 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Court Data Fetcher</title>
+</head>
+<body>
+    <h2>Enter Case Details</h2>
+    <form method="POST" action="/fetch">
+        <label>Case Type:</label><input type="text" name="case_type" required><br>
+        <label>Case Number:</label><input type="text" name="case_number" required><br>
+        <label>Filing Year:</label><input type="text" name="filing_year" required><br>
+        <button type="submit">Fetch Case</button>
+    </form>
+</body>
+</html>
