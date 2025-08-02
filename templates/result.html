@@ -1,14 +1,159 @@
 <!DOCTYPE html>
 <html>
 <head>
-    <title>Case Results</title>
+    <title>Case Results - Court Data Fetcher</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 0;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        .container {
+            max-width: 800px;
+            margin: 0 auto;
+            background: white;
+            padding: 30px;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        h1 {
+            color: #333;
+            text-align: center;
+            margin-bottom: 30px;
+        }
+        .result-item {
+            margin-bottom: 20px;
+            padding: 15px;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+            background-color: #fafafa;
+        }
+        .result-label {
+            font-weight: bold;
+            color: #2c5aa0;
+            margin-bottom: 5px;
+        }
+        .result-value {
+            color: #333;
+            word-wrap: break-word;
+        }
+        .error-message {
+            background-color: #ffe6e6;
+            border: 1px solid #ff9999;
+            color: #cc0000;
+            padding: 15px;
+            border-radius: 5px;
+            margin-bottom: 20px;
+        }
+        .success-message {
+            background-color: #e6ffe6;
+            border: 1px solid #99ff99;
+            color: #006600;
+            padding: 15px;
+            border-radius: 5px;
+            margin-bottom: 20px;
+        }
+        .nav-links {
+            text-align: center;
+            margin-top: 30px;
+        }
+        .nav-links a {
+            color: #2c5aa0;
+            text-decoration: none;
+            padding: 10px 20px;
+            border: 1px solid #2c5aa0;
+            border-radius: 5px;
+            margin: 0 10px;
+            display: inline-block;
+        }
+        .nav-links a:hover {
+            background-color: #2c5aa0;
+            color: white;
+        }
+        .raw-content {
+            background-color: #f8f8f8;
+            border: 1px solid #ddd;
+            padding: 15px;
+            border-radius: 5px;
+            font-family: monospace;
+            white-space: pre-wrap;
+            max-height: 300px;
+            overflow-y: auto;
+        }
+    </style>
 </head>
 <body>
-    <h2>Case Details</h2>
-    <p><strong>Party Names:</strong> {{ data.party_names }}</p>
-    <p><strong>Filing Date:</strong> {{ data.filing_date }}</p>
-    <p><strong>Next Hearing Date:</strong> {{ data.next_hearing_date }}</p>
-    <p><a href="{{ data.latest_order_pdf }}" target="_blank">Download Latest Order PDF</a></p>
-    <a href="/">Search another case</a>
+    <div class="container">
+        <h1>Case Search Results</h1>
+        
+        {% if data.error %}
+            <div class="error-message">
+                <strong>Error:</strong> {{ data.error }}
+            </div>
+        {% else %}
+            {% if data.case_details %}
+                <div class="result-item">
+                    <div class="result-label">Case Details:</div>
+                    <div class="result-value">{{ data.case_details }}</div>
+                </div>
+            {% endif %}
+            
+            {% if data.party_names %}
+                <div class="result-item">
+                    <div class="result-label">Party Names:</div>
+                    <div class="result-value">{{ data.party_names }}</div>
+                </div>
+            {% endif %}
+            
+            {% if data.filing_date %}
+                <div class="result-item">
+                    <div class="result-label">Filing Date:</div>
+                    <div class="result-value">{{ data.filing_date }}</div>
+                </div>
+            {% endif %}
+            
+            {% if data.next_hearing %}
+                <div class="result-item">
+                    <div class="result-label">Next Hearing Date:</div>
+                    <div class="result-value">{{ data.next_hearing }}</div>
+                </div>
+            {% endif %}
+            
+            {% if data.status %}
+                <div class="result-item">
+                    <div class="result-label">Case Status:</div>
+                    <div class="result-value">{{ data.status }}</div>
+                </div>
+            {% endif %}
+            
+            {% if data.latest_order_pdf %}
+                <div class="result-item">
+                    <div class="result-label">Latest Order PDF:</div>
+                    <div class="result-value">
+                        <a href="{{ data.latest_order_pdf }}" target="_blank">Download Latest Order PDF</a>
+                    </div>
+                </div>
+            {% endif %}
+            
+            {% if data.raw_content %}
+                <div class="result-item">
+                    <div class="result-label">Raw Content:</div>
+                    <div class="raw-content">{{ data.raw_content }}</div>
+                </div>
+            {% endif %}
+            
+            {% if not data.case_details and not data.party_names and not data.filing_date and not data.next_hearing and not data.status and not data.latest_order_pdf and not data.raw_content %}
+                <div class="success-message">
+                    <strong>Search completed successfully!</strong> No specific case details were found. This could mean the case doesn't exist or the search criteria need to be adjusted.
+                </div>
+            {% endif %}
+        {% endif %}
+        
+        <div class="nav-links">
+            <a href="/">Search Another Case</a>
+            <a href="/history">View Search History</a>
+        </div>
+    </div>
 </body>
 </html>
