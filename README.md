@@ -51,7 +51,7 @@ brew install tesseract
 
 1. **Clone the repository:**
 ```bash
-git clone <repository-url>
+git clone https://github.com/Alsanad-Opium/think_rise_foundation_assessment.git
 cd think_rise_foundation_assessment
 ```
 
@@ -99,9 +99,9 @@ http://localhost:5000
 curl -X POST http://localhost:5000/api/scrape \
   -H "Content-Type: application/json" \
   -d '{
-    "case_type": "Criminal",
-    "case_number": "123",
-    "filing_year": "2023"
+    "case_type": "Cri.M.A",
+    "case_number": "1628",
+    "filing_year": "2018"
   }'
 ```
 
