@@ -11,21 +11,29 @@ import numpy as np
 import pytesseract
 from selenium import webdriver
 from selenium.webdriver.common.by import By
-from selenium.webdriver.support.ui import WebDriverWait
+from selenium.webdriver.support.ui import WebDriverWait, Select
 from selenium.webdriver.support import expected_conditions as EC
 from selenium.webdriver.chrome.service import Service
 from selenium.webdriver.chrome.options import Options
 from webdriver_manager.chrome import ChromeDriverManager
 import logging
+import os
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
+# Set Tesseract path for Windows
+if os.name == 'nt':  # Windows
+    tesseract_path = r"C:\Program Files\Tesseract-OCR\tesseract.exe"
+    if os.path.exists(tesseract_path):
+        pytesseract.pytesseract.tesseract_cmd = tesseract_path
+
 class NagpurCourtScraper:
-    def __init__(self):
+    def __init__(self, enable_manual_captcha=False):
         self.base_url = "https://nagpur.dcourts.gov.in/court-orders-search-by-case-number/"
         self.driver = None
+        self.enable_manual_captcha = enable_manual_captcha
         self.setup_driver()
     
     def setup_driver(self):
@@ -47,11 +55,12 @@ class NagpurCourtScraper:
             raise
     
     def solve_captcha(self, captcha_element):
-        """Solve captcha using OCR"""
+        """Solve captcha using OCR with improved preprocessing"""
         try:
             # Check if Tesseract is available
             try:
                 pytesseract.get_tesseract_version()
+                logger.info("Tesseract is available")
             except Exception as e:
                 logger.warning(f"Tesseract not available: {e}")
                 # Return a dummy captcha for testing (you should install Tesseract for production)
@@ -73,10 +82,11 @@ class NagpurCourtScraper:
             # Convert to OpenCV format
             opencv_image = cv2.cvtColor(np.array(image), cv2.COLOR_RGB2BGR)
             
-            # Preprocess image for better OCR
-            gray = cv2.cvtColor(opencv_image, cv2.COLOR_BGR2GRAY)
+            # Try multiple preprocessing techniques
+            captcha_text = None
             
-            # Apply threshold to get black text on white background
+            # Method 1: Basic preprocessing
+            gray = cv2.cvtColor(opencv_image, cv2.COLOR_BGR2GRAY)
             _, thresh = cv2.threshold(gray, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
             
             # Remove noise
@@ -88,9 +98,43 @@ class NagpurCourtScraper:
             
             # Extract text
             captcha_text = pytesseract.image_to_string(opening, config=custom_config)
-            
-            # Clean the text
             captcha_text = re.sub(r'[^a-zA-Z0-9]', '', captcha_text).strip()
+            
+            # If first attempt failed or is too short, try alternative preprocessing
+            if not captcha_text or len(captcha_text) < 3:
+                logger.info("First OCR attempt failed, trying alternative preprocessing...")
+                
+                # Method 2: Adaptive threshold
+                adaptive_thresh = cv2.adaptiveThreshold(gray, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C, cv2.THRESH_BINARY, 11, 2)
+                captcha_text = pytesseract.image_to_string(adaptive_thresh, config=custom_config)
+                captcha_text = re.sub(r'[^a-zA-Z0-9]', '', captcha_text).strip()
+                
+                # Method 3: Different PSM mode if still no result
+                if not captcha_text or len(captcha_text) < 3:
+                    logger.info("Trying different PSM mode...")
+                    custom_config_alt = r'--oem 3 --psm 7 -c tessedit_char_whitelist=0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz'
+                    captcha_text = pytesseract.image_to_string(opening, config=custom_config_alt)
+                    captcha_text = re.sub(r'[^a-zA-Z0-9]', '', captcha_text).strip()
+                
+                # Method 4: Invert colors if still no result
+                if not captcha_text or len(captcha_text) < 3:
+                    logger.info("Trying inverted colors...")
+                    inverted = cv2.bitwise_not(opening)
+                    captcha_text = pytesseract.image_to_string(inverted, config=custom_config)
+                    captcha_text = re.sub(r'[^a-zA-Z0-9]', '', captcha_text).strip()
+                
+                # Method 5: Gaussian blur to reduce noise
+                if not captcha_text or len(captcha_text) < 3:
+                    logger.info("Trying Gaussian blur...")
+                    blurred = cv2.GaussianBlur(gray, (3, 3), 0)
+                    _, blurred_thresh = cv2.threshold(blurred, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
+                    captcha_text = pytesseract.image_to_string(blurred_thresh, config=custom_config)
+                    captcha_text = re.sub(r'[^a-zA-Z0-9]', '', captcha_text).strip()
+            
+            # If all methods fail, return a dummy value for testing
+            if not captcha_text or len(captcha_text) < 3:
+                logger.warning("All OCR attempts failed, using dummy captcha")
+                return "TEST123"
             
             logger.info(f"Captcha solved: {captcha_text}")
             return captcha_text
@@ -145,7 +189,6 @@ class NagpurCourtScraper:
                 )
                 
                 # Select the first available option (Nagpur, District Sessions Court III)
-                from selenium.webdriver.support.ui import Select
                 select = Select(court_complex_select)
                 # Try to select a specific court, fallback to first option
                 try:
@@ -217,39 +260,120 @@ class NagpurCourtScraper:
             logger.error(f"Failed to fill form fields: {e}")
             return False
     
+    def save_captcha_image(self, captcha_element, filename="captcha.png"):
+        """Save captcha image for manual review"""
+        try:
+            captcha_src = captcha_element.get_attribute('src')
+            
+            if captcha_src.startswith('data:image'):
+                # Handle base64 encoded image
+                image_data = captcha_src.split(',')[1]
+                image_bytes = base64.b64decode(image_data)
+                image = Image.open(io.BytesIO(image_bytes))
+            else:
+                # Handle URL image
+                response = requests.get(captcha_src)
+                image = Image.open(io.BytesIO(response.content))
+            
+            image.save(filename)
+            logger.info(f"Captcha image saved as {filename}")
+            return filename
+        except Exception as e:
+            logger.error(f"Failed to save captcha image: {e}")
+            return None
+
     def handle_captcha(self):
-        """Handle captcha if present"""
+        """Handle captcha if present with retry mechanism"""
         try:
             # Look for the specific captcha image used by this website
             captcha_img = self.driver.find_element(By.ID, "siwp_captcha_image_0")
             if captcha_img:
                 logger.info("Captcha found, attempting to solve...")
                 
-                # Check if Tesseract is available
-                try:
-                    pytesseract.get_tesseract_version()
-                    # Use OCR to solve captcha
-                    captcha_text = self.solve_captcha(captcha_img)
-                except Exception as e:
-                    logger.warning(f"Tesseract not available: {e}")
-                    # For testing, you can uncomment the line below to manually enter captcha
-                    # captcha_text = input("Please enter the captcha code you see: ")
-                    # Or use a dummy value for testing
-                    captcha_text = "TEST123"
+                # Try up to 3 times to solve captcha
+                max_attempts = 3
+                for attempt in range(max_attempts):
+                    logger.info(f"Captcha attempt {attempt + 1}/{max_attempts}")
+                    
+                    # Check if manual captcha input is enabled
+                    if self.enable_manual_captcha:
+                        # Save captcha image for manual review
+                        captcha_file = self.save_captcha_image(captcha_img, f"captcha_attempt_{attempt + 1}.png")
+                        if captcha_file:
+                            print(f"\nCaptcha image saved as: {captcha_file}")
+                            print("Please check the image and enter the captcha code manually.")
+                            captcha_text = input("Enter captcha code: ").strip()
+                        else:
+                            captcha_text = "TEST123"
+                    else:
+                        # Use OCR
+                        try:
+                            pytesseract.get_tesseract_version()
+                            # Use OCR to solve captcha
+                            captcha_text = self.solve_captcha(captcha_img)
+                        except Exception as e:
+                            logger.warning(f"Tesseract not available: {e}")
+                            # For testing, you can uncomment the line below to manually enter captcha
+                            # captcha_text = input("Please enter the captcha code you see: ")
+                            # Or use a dummy value for testing
+                            captcha_text = "TEST123"
+                    
+                    if not captcha_text:
+                        continue
+                    
+                    # Find captcha input field
+                    captcha_input = self.driver.find_element(By.ID, "siwp_captcha_value_0")
+                    if captcha_input:
+                        captcha_input.clear()
+                        captcha_input.send_keys(captcha_text)
+                        logger.info(f"Filled captcha: {captcha_text}")
+                        
+                        # Submit form to check if captcha is correct
+                        if self.submit_form():
+                            # Check if we got an error message about incorrect captcha
+                            time.sleep(3)
+                            soup = BeautifulSoup(self.driver.page_source, 'html.parser')
+                            
+                            # Check for various error messages
+                            page_text = soup.get_text().lower()
+                            captcha_error = any(phrase in page_text for phrase in [
+                                'captcha', 'incorrect', 'wrong', 'invalid', 'error'
+                            ])
+                            
+                            # Also check if form is still visible (indicating validation failure)
+                            form_still_visible = soup.find('form', id='ecourt-services-court-order-case-number-order')
+                            
+                            if captcha_error or form_still_visible:
+                                logger.warning(f"Captcha validation failed on attempt {attempt + 1}")
+                                logger.info(f"Page contains error: {captcha_error}, Form still visible: {form_still_visible is not None}")
+                                
+                                if attempt < max_attempts - 1:
+                                    # Refresh the page to get a new captcha
+                                    self.driver.refresh()
+                                    time.sleep(3)
+                                    # Wait for page to load and find new captcha
+                                    WebDriverWait(self.driver, 10).until(
+                                        EC.presence_of_element_located((By.ID, "est_code"))
+                                    )
+                                    # Re-fill form fields
+                                    self.fill_form_fields(self.last_case_type, self.last_case_number, self.last_filing_year)
+                                    # Find new captcha image
+                                    captcha_img = self.driver.find_element(By.ID, "siwp_captcha_image_0")
+                                    continue
+                                else:
+                                    logger.error("All captcha attempts failed")
+                                    return False
+                            else:
+                                logger.info("Captcha validation successful")
+                                return True
+                        else:
+                            logger.error("Failed to submit form")
+                            return False
+                    else:
+                        logger.warning("Captcha input field not found")
+                        return False
                 
-                if not captcha_text:
-                    return False
-                
-                # Find captcha input field
-                captcha_input = self.driver.find_element(By.ID, "siwp_captcha_value_0")
-                if captcha_input:
-                    captcha_input.clear()
-                    captcha_input.send_keys(captcha_text)
-                    logger.info(f"Filled captcha: {captcha_text}")
-                    return True
-                else:
-                    logger.warning("Captcha input field not found")
-                    return False
+                return False
             
             logger.info("No captcha found")
             return True
@@ -338,6 +462,11 @@ class NagpurCourtScraper:
         try:
             logger.info(f"Starting scrape for case: {case_type}/{case_number}/{filing_year}")
             
+            # Store case data for retry purposes
+            self.last_case_type = case_type
+            self.last_case_number = case_number
+            self.last_filing_year = filing_year
+            
             # Navigate to the website
             self.driver.get(self.base_url)
             logger.info("Navigated to website")
@@ -352,15 +481,11 @@ class NagpurCourtScraper:
             if not self.fill_form_fields(case_type, case_number, filing_year):
                 raise Exception("Failed to fill form fields")
             
-            # Handle captcha
+            # Handle captcha (now includes retry mechanism)
             if not self.handle_captcha():
                 raise Exception("Failed to handle captcha")
             
-            # Submit form
-            if not self.submit_form():
-                raise Exception("Failed to submit form")
-            
-            # Extract results
+            # Extract results (form was already submitted in handle_captcha)
             results = self.extract_results()
             
             return results
