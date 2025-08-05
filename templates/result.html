@@ -81,6 +81,48 @@
             max-height: 300px;
             overflow-y: auto;
         }
+        .cases-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 10px;
+        }
+        .cases-table th, .cases-table td {
+            border: 1px solid #ddd;
+            padding: 12px;
+            text-align: left;
+        }
+        .cases-table th {
+            background-color: #2c5aa0;
+            color: white;
+            font-weight: bold;
+        }
+        .cases-table tr:nth-child(even) {
+            background-color: #f9f9f9;
+        }
+        .cases-table tr:hover {
+            background-color: #f5f5f5;
+        }
+        .pdf-link {
+            color: #2c5aa0;
+            text-decoration: none;
+            font-weight: bold;
+        }
+        .pdf-link:hover {
+            text-decoration: underline;
+        }
+        .court-name {
+            font-weight: bold;
+            color: #2c5aa0;
+            margin-bottom: 10px;
+        }
+        .case-count {
+            background-color: #e8f4f8;
+            border: 1px solid #2c5aa0;
+            padding: 10px;
+            border-radius: 5px;
+            margin-bottom: 20px;
+            text-align: center;
+        }
     </style>
 </head>
 <body>
@@ -92,6 +134,49 @@
                 <strong>Error:</strong> {{ data.error }}
             </div>
         {% else %}
+            {% if data.cases %}
+                <div class="case-count">
+                    <strong>Found {{ data.total_cases }} case(s)</strong>
+                </div>
+                
+                {% set current_court = "" %}
+                {% for case in data.cases %}
+                    {% if case.court_name != current_court %}
+                        {% set current_court = case.court_name %}
+                        {% if not loop.first %}
+                            </table>
+                        {% endif %}
+                        <div class="court-name">{{ case.court_name }}</div>
+                        <table class="cases-table">
+                            <thead>
+                                <tr>
+                                    <th>Serial No.</th>
+                                    <th>Case Details</th>
+                                    <th>Order Date</th>
+                                    <th>Order Details</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                    {% endif %}
+                                <tr>
+                                    <td>{{ case.serial_number }}</td>
+                                    <td>{{ case.case_details }}</td>
+                                    <td>{{ case.order_date }}</td>
+                                    <td>
+                                        {% if case.pdf_link %}
+                                            <a href="{{ case.pdf_link }}" target="_blank" class="pdf-link">{{ case.pdf_text }}</a>
+                                        {% else %}
+                                            {{ case.order_details }}
+                                        {% endif %}
+                                    </td>
+                                </tr>
+                    {% if loop.last %}
+                            </tbody>
+                        </table>
+                    {% endif %}
+                {% endfor %}
+            {% endif %}
+            
             {% if data.case_details %}
                 <div class="result-item">
                     <div class="result-label">Case Details:</div>
@@ -143,7 +228,7 @@
                 </div>
             {% endif %}
             
-            {% if not data.case_details and not data.party_names and not data.filing_date and not data.next_hearing and not data.status and not data.latest_order_pdf and not data.raw_content %}
+            {% if not data.cases and not data.case_details and not data.party_names and not data.filing_date and not data.next_hearing and not data.status and not data.latest_order_pdf and not data.raw_content %}
                 <div class="success-message">
                     <strong>Search completed successfully!</strong> No specific case details were found. This could mean the case doesn't exist or the search criteria need to be adjusted.
                 </div>

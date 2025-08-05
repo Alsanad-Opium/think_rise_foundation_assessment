@@ -1,16 +1,20 @@
 # Nagpur District Court Web Scraper
 
-A comprehensive web scraping application for the Nagpur District Court website with automatic captcha handling and case data extraction.
+A comprehensive web scraping application for the Nagpur District Court website with automatic captcha handling, case data extraction, and PDF document links.
 
 ## Features
 
-- **Automatic Captcha Solving**: Uses OCR (Optical Character Recognition) to solve captcha challenges
+- **Manual CAPTCHA Entry**: Web interface displays CAPTCHA images for manual text entry
+- **PDF Document Extraction**: Automatically extracts and displays PDF links from case results
+- **Structured Case Data**: Extracts case details including serial numbers, case types, order dates, and PDF links
+- **Session Management**: Single browser session with automatic timeout and renewal
 - **Smart Form Detection**: Automatically identifies and fills form fields based on common naming patterns
 - **Web Interface**: User-friendly Flask web application for easy interaction
 - **Search History**: Tracks and displays previous search queries
 - **API Endpoints**: RESTful API for programmatic access
 - **Error Handling**: Comprehensive error handling and logging
 - **Database Storage**: SQLite database for storing search history and results
+- **Visible Browser Mode**: Runs with visible browser window for better debugging and monitoring
 
 ## Technology Stack
 
@@ -84,13 +88,14 @@ http://localhost:5000
    - Case Type (e.g., Criminal, Civil)
    - Case Number (e.g., 123, 456)
    - Filing Year (e.g., 2023, 2024)
+   - CAPTCHA text (displayed image will refresh automatically)
 
-4. **Click "Search Case"** - The system will automatically:
+4. **Click "Search Case"** - The system will:
    - Navigate to the Nagpur District Court website
    - Fill in the form fields
-   - Solve any captcha challenges
-   - Extract case information
-   - Display results
+   - Submit the CAPTCHA text
+   - Extract structured case information including PDF links
+   - Display results in a formatted table with clickable PDF links
 
 ### API Usage
 
@@ -115,13 +120,21 @@ curl http://localhost:5000/test
 ```python
 from scraper import NagpurCourtScraper
 
-# Create scraper instance
-scraper = NagpurCourtScraper()
+# Create scraper instance (headless=False for visible browser)
+scraper = NagpurCourtScraper(headless=False)
 
 try:
     # Search for case data
     result = scraper.scrape_case_data("Criminal", "123", "2023")
     print(result)
+    
+    # Access extracted case data
+    if 'cases' in result:
+        for case in result['cases']:
+            print(f"Case: {case['case_details']}")
+            print(f"Order Date: {case['order_date']}")
+            if 'pdf_link' in case:
+                print(f"PDF Link: {case['pdf_link']}")
 finally:
     # Always close the scraper
     scraper.close()
