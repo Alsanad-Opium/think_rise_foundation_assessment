@@ -30,10 +30,11 @@ if os.name == 'nt':  # Windows
         pytesseract.pytesseract.tesseract_cmd = tesseract_path
 
 class NagpurCourtScraper:
-    def __init__(self, enable_manual_captcha=False):
+    def __init__(self, enable_manual_captcha=False, headless=False):
         self.base_url = "https://nagpur.dcourts.gov.in/court-orders-search-by-case-number/"
         self.driver = None
         self.enable_manual_captcha = enable_manual_captcha
+        self.headless = headless
         self.setup_driver()
     
     def setup_driver(self):
@@ -43,13 +44,14 @@ class NagpurCourtScraper:
         chrome_options.add_argument("--disable-dev-shm-usage")
         chrome_options.add_argument("--disable-gpu")
         chrome_options.add_argument("--window-size=1920,1080")
-        # Uncomment the line below to run in headless mode
-        # chrome_options.add_argument("--headless")
+        # Run in headless mode based on parameter
+        if self.headless:
+            chrome_options.add_argument("--headless")
         
         try:
             service = Service(ChromeDriverManager().install())
             self.driver = webdriver.Chrome(service=service, options=chrome_options)
-            logger.info("Chrome driver setup successful")
+            logger.info("Chrome driver setup successful (headless: {})".format(self.headless))
         except Exception as e:
             logger.error(f"Failed to setup Chrome driver: {e}")
             raise
@@ -442,7 +444,63 @@ class NagpurCourtScraper:
             # Look for results in the specific containers used by this website
             results = {}
             
-            # Check for results in the cnrResults container
+            # Look for the data table with case results
+            data_tables = soup.find_all('table', class_='data-table-1')
+            
+            if data_tables:
+                logger.info(f"Found {len(data_tables)} data table(s)")
+                all_cases = []
+                
+                for table_index, table in enumerate(data_tables):
+                    # Extract caption (court name)
+                    caption = table.find('caption')
+                    court_name = caption.get_text(strip=True) if caption else f"Court {table_index + 1}"
+                    
+                    # Extract table rows
+                    tbody = table.find('tbody')
+                    if tbody:
+                        rows = tbody.find_all('tr')
+                        logger.info(f"Found {len(rows)} case(s) in table for {court_name}")
+                        
+                        for row in rows:
+                            cells = row.find_all('td')
+                            if len(cells) >= 4:  # Ensure we have all required columns
+                                case_info = {}
+                                
+                                # Extract serial number
+                                serial_span = cells[0].find('span', class_='bt-content')
+                                case_info['serial_number'] = serial_span.get_text(strip=True) if serial_span else ""
+                                
+                                # Extract case type/number/year
+                                case_span = cells[1].find('span', class_='bt-content')
+                                case_info['case_details'] = case_span.get_text(strip=True) if case_span else ""
+                                
+                                # Extract order date
+                                date_span = cells[2].find('span', class_='bt-content')
+                                case_info['order_date'] = date_span.get_text(strip=True) if date_span else ""
+                                
+                                # Extract order details and PDF link
+                                order_span = cells[3].find('span', class_='bt-content')
+                                if order_span:
+                                    # Look for PDF link
+                                    pdf_link = order_span.find('a')
+                                    if pdf_link:
+                                        case_info['pdf_link'] = pdf_link.get('href', '')
+                                        case_info['pdf_text'] = pdf_link.get_text(strip=True)
+                                    else:
+                                        case_info['order_details'] = order_span.get_text(strip=True)
+                                
+                                case_info['court_name'] = court_name
+                                all_cases.append(case_info)
+                
+                if all_cases:
+                    results['cases'] = all_cases
+                    results['total_cases'] = len(all_cases)
+                    logger.info(f"Successfully extracted {len(all_cases)} case(s) with details")
+                else:
+                    logger.warning("No cases found in data tables")
+            
+            # Check for results in the cnrResults container (fallback)
             cnr_results = soup.find('div', id='cnrResults')
             if cnr_results and cnr_results.get_text(strip=True):
                 results['case_results'] = cnr_results.get_text(strip=True)
@@ -538,7 +596,7 @@ class NagpurCourtScraper:
 # Legacy function for backward compatibility
 def scrape_case_data(case_type, case_number, filing_year):
     """Legacy function that creates a scraper instance and scrapes data"""
-    scraper = NagpurCourtScraper()
+    scraper = NagpurCourtScraper(headless=False)
     try:
         return scraper.scrape_case_data(case_type, case_number, filing_year)
     finally:
@@ -546,7 +604,7 @@ def scrape_case_data(case_type, case_number, filing_year):
 
 if __name__ == "__main__":
     # Test the scraper
-    scraper = NagpurCourtScraper()
+    scraper = NagpurCourtScraper(headless=False)
     try:
         result = scraper.scrape_case_data("Criminal", "123", "2023")
         print("Result:", result)
