@@ -282,6 +282,37 @@ class NagpurCourtScraper:
             logger.error(f"Failed to save captcha image: {e}")
             return None
 
+    def get_captcha_image(self, save_path="static/captcha.png"):
+        """Get the current captcha image and save it to the specified path"""
+        try:
+            # Wait for captcha image to be present
+            WebDriverWait(self.driver, 10).until(
+                EC.presence_of_element_located((By.ID, "siwp_captcha_image_0"))
+            )
+            
+            captcha_img = self.driver.find_element(By.ID, "siwp_captcha_image_0")
+            return self.save_captcha_image(captcha_img, save_path)
+        except Exception as e:
+            logger.error(f"Failed to get captcha image: {e}")
+            return None
+
+    def fill_captcha_manual(self, captcha_text):
+        """Fill captcha with manually provided text"""
+        try:
+            # Find captcha input field
+            captcha_input = self.driver.find_element(By.ID, "siwp_captcha_value_0")
+            if captcha_input:
+                captcha_input.clear()
+                captcha_input.send_keys(captcha_text)
+                logger.info(f"Filled captcha manually: {captcha_text}")
+                return True
+            else:
+                logger.warning("Captcha input field not found")
+                return False
+        except Exception as e:
+            logger.error(f"Failed to fill captcha manually: {e}")
+            return False
+
     def handle_captcha(self):
         """Handle captcha if present with retry mechanism"""
         try:

@@ -106,9 +106,28 @@
                 <label for="filing_year">Filing Year:</label>
                 <input type="text" id="filing_year" name="filing_year" required placeholder="e.g., 2023, 2024, etc.">
             </div>
-            
+            <div class="form-group">
+                <label for="captcha_text">Enter CAPTCHA:</label>
+                <div style="display: flex; align-items: center; gap: 10px;">
+                    <img id="captcha-img" src="/static/captcha.png" alt="CAPTCHA" style="height: 50px; border: 1px solid #ccc;">
+                    <button type="button" onclick="refreshCaptcha()" style="padding: 6px 12px; font-size: 14px;">Refresh</button>
+                </div>
+                <input type="text" id="captcha_text" name="captcha_text" required placeholder="Enter the text from the image">
+            </div>
             <button type="submit">Search Case</button>
         </form>
+        <script>
+        function refreshCaptcha() {
+            fetch('/get_captcha?' + new Date().getTime())
+                .then(() => {
+                    document.getElementById('captcha-img').src = '/static/captcha.png?' + new Date().getTime();
+                });
+        }
+        // On page load, fetch a fresh captcha
+        window.onload = function() {
+            refreshCaptcha();
+        };
+        </script>
         
         <div class="nav-links">
             <a href="/history">View Search History</a>

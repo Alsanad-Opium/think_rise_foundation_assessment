@@ -1,8 +1,11 @@
-# app.py
-from flask import Flask, render_template, request, jsonify, session
+ # app.py
+from flask import Flask, render_template, request, jsonify, session, send_from_directory
 import sqlite3
 from scraper import NagpurCourtScraper
 import logging
+from selenium.webdriver.common.by import By
+from selenium.webdriver.support.ui import WebDriverWait
+from selenium.webdriver.support import expected_conditions as EC
 
 app = Flask(__name__)
 app.secret_key = 'your-secret-key-here'  # Change this in production
@@ -33,20 +36,54 @@ def init_db():
 def index():
     return render_template('index.html')
 
+@app.route('/get_captcha')
+def get_captcha():
+    """Fetch the latest captcha image from the court website and save it to static/captcha.png"""
+    try:
+        scraper = NagpurCourtScraper()
+        scraper.driver.get(scraper.base_url)
+        # Wait for page to load
+        WebDriverWait(scraper.driver, 10).until(
+            EC.presence_of_element_located((By.ID, "est_code"))
+        )
+        # Get and save captcha image
+        captcha_path = scraper.get_captcha_image("static/captcha.png")
+        scraper.close()
+        if captcha_path:
+            return send_from_directory('static', 'captcha.png')
+        else:
+            return "", 500
+    except Exception as e:
+        logger.error(f"Error fetching captcha: {e}")
+        return "", 500
+
 @app.route('/fetch', methods=['POST'])
 def fetch():
     case_type = request.form['case_type']
     case_number = request.form['case_number']
     filing_year = request.form['filing_year']
+    captcha_text = request.form.get('captcha_text')
 
     try:
         # Create a new scraper instance for this request
         scraper = NagpurCourtScraper()
+        # Navigate to the website and fill form fields
+        scraper.driver.get(scraper.base_url)
+        WebDriverWait(scraper.driver, 10).until(
+            EC.presence_of_element_located((By.ID, "est_code"))
+        )
+        scraper.fill_form_fields(case_type, case_number, filing_year)
         
-        # Scrape data from court
-        data = scraper.scrape_case_data(case_type, case_number, filing_year)
+        # Fill captcha manually
+        if not scraper.fill_captcha_manual(captcha_text):
+            raise Exception("Failed to fill captcha")
         
-        # Close the scraper
+        # Submit form
+        if not scraper.submit_form():
+            raise Exception("Failed to submit form")
+        
+        # Extract results
+        data = scraper.extract_results()
         scraper.close()
 
         # Save to DB
